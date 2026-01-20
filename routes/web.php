@@ -117,6 +117,12 @@ Route::middleware(['auth', 'verified', 'role:admin'])
 
         // [NEW] Rute untuk Memulihkan Data (Self-Healing) dari Snapshot
         Route::post('transaksi/{id}/restore', [TransaksiController::class, 'restoreData'])->name('transaksi.restore');
+
+        // [TAMBAHKAN INI] Rute untuk Audit Global (Cek Seluruh Data)
+        Route::post('transaksi/audit-global', [TransaksiController::class, 'globalAudit'])->name('transaksi.globalAudit');
+
+        // [NEW] Rute untuk Memulihkan Data (Self-Healing) dari Snapshot
+        Route::post('transaksi/{id}/restore', [TransaksiController::class, 'restoreData'])->name('transaksi.restore');
         
         Route::get('transaksi/cetak', [TransaksiController::class, 'cetakLaporan'])->name('transaksi.cetak');
 });

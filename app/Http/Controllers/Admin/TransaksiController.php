@@ -8,8 +8,7 @@ use App\Models\Transaksi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log; 
-use App\Services\BlockchainService;
+use Illuminate\Support\Facades\Log;
 
 class TransaksiController extends Controller
 {
@@ -64,7 +63,7 @@ class TransaksiController extends Controller
     }
 
     /**
-     * Verifikasi dengan Format Snapshot Lengkap
+     * Verifikasi dengan Format Snapshot Lengkap & Integrasi Blockchain Asli
      */
     public function verifikasi(Request $request, Pesanan $pesanan)
     {
@@ -89,7 +88,7 @@ class TransaksiController extends Controller
             ]);
 
             // ==========================================================
-            // LOGIKA BLOCKCHAIN & SNAPSHOT FORENSIK
+            // LOGIKA BLOCKCHAIN & SNAPSHOT FORENSIK (REAL IMPLEMENTATION)
             // ==========================================================
             
             // Format Data Snapshot: "ID|TOTAL|WAKTU|STATUS|METODE"
@@ -102,14 +101,46 @@ class TransaksiController extends Controller
             // Hash data tersebut
             $dataHash = hash('sha256', $rawData);
 
-            // Kirim ke Blockchain Service (Simulasi)
-            $blockchainService = new BlockchainService();
-            $txHashBlockchain = $blockchainService->catatTransaksi("TRX-" . $transaksi->id, $dataHash);
+            // ---------------------------------------------------------
+            // MEMANGGIL NODE.JS BRIDGE
+            // ---------------------------------------------------------
+            // Kita panggil script bridge.js via terminal
+            
+            $nodePath = 'node'; // Pastikan 'node' sudah ada di Environment Variable Windows
+            $scriptPath = base_path('blockchain/bridge.js'); // Lokasi script di folder blockchain
+            $trxIdBlockchain = "TRX-" . $transaksi->id;
 
-            // Update Database: Simpan Hash DAN Snapshot Asli
+            // Perintah Terminal: node blockchain/bridge.js store "TRX-1" "hash..."
+            // escapeshellarg digunakan agar aman dari karakter aneh
+            $command = "$nodePath \"$scriptPath\" store " . escapeshellarg($trxIdBlockchain) . " " . escapeshellarg($dataHash);
+
+            $output = [];
+            $returnCode = 0;
+            
+            // Eksekusi Perintah
+            exec($command . " 2>&1", $output, $returnCode);
+
+            // Parsing Output untuk mencari "TX_HASH"
+            $txHashBlockchain = null;
+            foreach ($output as $line) {
+                if (str_contains($line, 'TX_HASH:')) {
+                    $txHashBlockchain = trim(str_replace('TX_HASH:', '', $line));
+                    break;
+                }
+            }
+
+            // Cek Error: Jika return code bukan 0 atau tidak dapat hash
+            if ($returnCode !== 0 || !$txHashBlockchain) {
+                // Konversi array output ke string untuk log error
+                $errorMessage = implode("\n", $output);
+                throw new \Exception("Gagal mencatat ke Blockchain! Detail Error: " . $errorMessage);
+            }
+
+            // ---------------------------------------------------------
+            // Update Database: Simpan Hash DAN Snapshot Asli DAN TX Hash
             $transaksi->update([
                 'data_hash' => $dataHash,
-                'tx_hash_blockchain' => $txHashBlockchain,
+                'tx_hash_blockchain' => $txHashBlockchain, // <--- INI BENAR (Sesuai phpMyAdmin)
                 'snapshot_data' => $rawData 
             ]);
 
@@ -119,7 +150,7 @@ class TransaksiController extends Controller
             
             $shortHash = substr($txHashBlockchain, 0, 10) . '...';
             return redirect()->route('admin.pesanan.show', $pesanan)
-                ->with('success', 'Pembayaran diverifikasi & Data Forensik Diamankan! (Hash: ' . $shortHash . ')');
+                ->with('success', 'Pembayaran diverifikasi & Data Tercatat Permanen di Blockchain! (TX: ' . $shortHash . ')');
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -220,7 +251,6 @@ class TransaksiController extends Controller
 
     /**
      * FITUR BARU: Memulihkan Data (Restore) berdasarkan Snapshot
-     * Ini dipanggil saat tombol "PULIHKAN DATA SEKARANG" diklik.
      */
     public function restoreData($id)
     {
@@ -238,13 +268,12 @@ class TransaksiController extends Controller
         }
 
         // 3. Lakukan Restore Data
-        // Format Snapshot: ID|TOTAL|WAKTU|STATUS|METODE
         $parts = explode('|', $transaksi->snapshot_data);
 
         if (count($parts) >= 5) {
             $transaksi->update([
                 'total_bayar'       => $parts[1],
-                'created_at'        => $parts[2], // Mengembalikan waktu asli
+                'created_at'        => $parts[2],
                 'status_pembayaran' => $parts[3],
                 'metode_pembayaran' => $parts[4],
             ]);
@@ -308,5 +337,45 @@ class TransaksiController extends Controller
             'startDate' => $startDateObj,
             'endDate' => $endDateObj
         ]);
+    }
+    /**
+     * Fitur Global Audit: Membandingkan Jumlah Data
+     */
+    public function globalAudit()
+    {
+        // 1. Hitung Jumlah di Database MySQL
+        $countMySQL = Transaksi::count();
+
+        // 2. Hitung Jumlah di Blockchain (Panggil Bridge)
+        $nodePath = 'node'; 
+        $scriptPath = base_path('blockchain/bridge.js');
+        
+        // Perintah: node bridge.js count
+        $command = "$nodePath \"$scriptPath\" count";
+        $output = [];
+        $returnCode = 0;
+        exec($command . " 2>&1", $output, $returnCode);
+
+        $countBlockchain = 0;
+        foreach ($output as $line) {
+            if (str_contains($line, 'TOTAL_BLOCKCHAIN:')) {
+                $countBlockchain = (int) trim(str_replace('TOTAL_BLOCKCHAIN:', '', $line));
+                break;
+            }
+        }
+
+        // 3. Bandingkan
+        $status = 'AMAN';
+        $message = "Integritas Terjaga. Jumlah data konsisten ($countMySQL Data).";
+        $color = 'success';
+
+        if ($countMySQL !== $countBlockchain) {
+            $status = 'BAHAYA';
+            $selisih = $countBlockchain - $countMySQL;
+            $message = "PERINGATAN KRITIS! Terdeteksi $selisih data telah DIHAPUS PAKSA dari Database! (Blockchain: $countBlockchain vs Database: $countMySQL)";
+            $color = 'danger';
+        }
+
+        return redirect()->route('admin.transaksi.index')->with($color, $message);
     }
 }

@@ -26,6 +26,34 @@
     <div class="py-8 bg-gray-50 min-h-screen">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             
+            
+            
+            <?php if(session('success')): ?>
+                <div class="mb-6 p-4 rounded-2xl bg-green-50 border border-green-100 text-green-800 shadow-sm flex items-center gap-4">
+                    <div class="p-2 bg-green-100 rounded-full text-green-600">
+                        <i data-lucide="shield-check" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg">Sistem Aman</h4>
+                        <p class="text-sm"><?php echo e(session('success')); ?></p>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            
+            <?php if(session('danger')): ?>
+                <div class="mb-6 p-4 rounded-2xl bg-red-50 border border-red-100 text-red-800 shadow-sm flex items-center gap-4 animate-pulse">
+                    <div class="p-2 bg-red-100 rounded-full text-red-600">
+                        <i data-lucide="siren" class="w-8 h-8"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-black text-lg uppercase tracking-wider">PERINGATAN KEAMANAN!</h4>
+                        <p class="font-bold text-red-600"><?php echo e(session('danger')); ?></p>
+                        <p class="text-xs mt-1 text-red-500">Silakan cek log aktivitas atau hubungi teknisi.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
             <div class="grid grid-cols-1 lg:grid-cols-4 gap-8" 
                  x-data="{
                     range: '<?php echo e(request('range', 'daily')); ?>',
@@ -137,6 +165,20 @@
                         <i data-lucide="printer" class="w-4 h-4"></i>
                         Cetak Laporan PDF
                     </a>
+
+                    
+                    
+                    <form action="<?php echo e(route('admin.transaksi.globalAudit')); ?>" method="POST">
+                        <?php echo csrf_field(); ?>
+                        <button type="submit" 
+                           class="flex items-center justify-center gap-2 w-full py-3 bg-yellow-400 text-yellow-900 rounded-xl text-sm font-bold shadow-lg hover:bg-yellow-500 transition-all transform hover:-translate-y-0.5 ring-2 ring-yellow-200">
+                            <i data-lucide="search" class="w-4 h-4"></i>
+                            Cek Audit Global
+                        </button>
+                        <p class="text-[10px] text-gray-400 text-center mt-2">
+                            *Membandingkan jumlah data Database vs Blockchain
+                        </p>
+                    </form>
 
                 </div>
 
